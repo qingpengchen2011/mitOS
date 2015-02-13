@@ -7,10 +7,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <string.h>
 
 // Simplifed xv6 shell.
 
-#define MAXARGS 10
+#define MAXARGS 100
 
 // All commands have at least a type. Have looked at the type, the code
 // typically casts the *cmd to some specific cmd type.
@@ -68,10 +69,12 @@ retry:
       exit(0);
     // Your code here ...
     if ( execv(ecmd->argv[0], ecmd->argv)== -1 ) { //if we ever return here, we get an error
-	if ( errno==ENOENT) {
-            appendpath(ecmd);
-	    goto retry;
-	}
+        if ( errno==ENOENT) {
+            if (appendpath(ecmd)==0) {
+                goto retry;
+            }
+            perror("execv");
+        }
     }
     break;
 
@@ -354,11 +357,28 @@ parseexec(char **ps, char *es)
 
 //----------------------------------------
 int appendpath(struct execcmd *cmd) {
-	static char filepath[MAXARGS];
-	static int count = 0;
-	snprintf(filepath, MAXARGS, "%s%s", "/bin/", cmd->argv[0]);
-	cmd->argv[0] = filepath;	
-	return (count++) == 1;
+    static char filepath[MAXARGS]; 
+    static int count = 0;
+    static char * paths = NULL;
+    static char * origin_cmd = NULL;
+    char * token = NULL;
+    int len;
+
+    if ( (++count) == 1) {
+    	paths = getenv("PATH");
+	origin_cmd =  cmd->argv[0];
+
+    }
+
+    if ((token = strsep(&paths,":")) != NULL) {
+        len = strlen(token);
+        if (token[len - 1]=='/')
+            token[len - 1] ='\0'; 
+        snprintf(filepath, MAXARGS, "%s/%s", token, origin_cmd);
+        cmd->argv[0] = filepath;
+        return 0;
+    }
+    return 1;
 }
 
 
