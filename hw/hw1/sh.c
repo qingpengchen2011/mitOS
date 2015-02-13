@@ -39,8 +39,8 @@ struct pipecmd {
 
 int fork1(void);  // Fork but exits on failure.
 struct cmd *parsecmd(char*);
+int appendpath(struct execcmd *cmd);
 
-void appendpath(struct execcmd *cmd);
 
 // Execute cmd.  Never returns.
 void
@@ -68,7 +68,7 @@ retry:
     if ( execv(ecmd->argv[0], ecmd->argv)== -1 ) { //if we ever return here, we get an error
 	if ( errno==ENOENT) {
             appendpath(ecmd);
-  	    goto retry;
+	    goto retry;
 	}
     }
     break;
@@ -90,8 +90,37 @@ retry:
 
  case '|':
     pcmd = (struct pipecmd*)cmd;
-    fprintf(stderr, "pipe not implemented\n");
     // Your code here ...
+    if (pipe(p) == -1) {
+	perror("pipe");
+	break;
+    } 
+    
+    if (fork1() == 0) {  // in child 1
+        close(p[1]);
+	if (dup2(p[0], STDIN_FILENO) == -1){
+		perror("child dup2");
+		break;
+	}
+        close(p[0]);
+	runcmd(pcmd->right);
+    }  
+    else { // in parent 
+        close(p[0]);
+	if (fork1() == 0) {  // in child 2
+		if (dup2(p[1], STDOUT_FILENO) == -1){
+			perror("parent dup2");
+			break;
+		}
+		close(p[1]);
+		runcmd(pcmd->left);
+	}
+	// in parent 
+        close(p[1]);
+    }
+    // in parent, wait the 2 children to complete
+    wait(NULL);
+    wait(NULL);
     break;
   }    
 
@@ -119,7 +148,7 @@ main(void)
 
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
-    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){	//cd is the buildin command
       // Clumsy but will have to do for now.
       // Chdir has no effect on the parent if run in the child.
       buf[strlen(buf)-1] = 0;  // chop \n
@@ -348,11 +377,10 @@ parseexec(char **ps, char *es)
   return ret;
 }
 
-
-// --------------------------------
-void appendpath(struct execcmd *cmd) {
+int appendpath(struct execcmd *cmd) {
 	static char filepath[MAXARGS];
+	static int count = 0;
 	snprintf(filepath, MAXARGS, "%s%s", "/bin/", cmd->argv[0]);
 	cmd->argv[0] = filepath;	
-	return;
+	return (count++) == 1;
 }
