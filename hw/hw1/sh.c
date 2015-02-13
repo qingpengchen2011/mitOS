@@ -11,7 +11,8 @@
 
 // Simplifed xv6 shell.
 
-#define MAXARGS 100
+#define MAXARGS 10
+#define BUFSIZE 4096
 
 // All commands have at least a type. Have looked at the type, the code
 // typically casts the *cmd to some specific cmd type.
@@ -357,24 +358,28 @@ parseexec(char **ps, char *es)
 
 //----------------------------------------
 int appendpath(struct execcmd *cmd) {
-    static char filepath[MAXARGS]; 
+    static char filepath[BUFSIZE]; 
     static int count = 0;
-    static char * paths = NULL;
+    static char paths[BUFSIZE];
     static char * origin_cmd = NULL;
+    static char * p = NULL;
     char * token = NULL;
+
     int len;
 
     if ( (++count) == 1) {
-    	paths = getenv("PATH");
+    	p = getenv("PATH");
 	origin_cmd =  cmd->argv[0];
-
+	len = strlen(p);
+	strncpy(paths, p, BUFSIZE);
+	p = paths;
     }
 
-    if ((token = strsep(&paths,":")) != NULL) {
+    if ((token = strsep(&p,":")) != NULL) {
         len = strlen(token);
         if (token[len - 1]=='/')
             token[len - 1] ='\0'; 
-        snprintf(filepath, MAXARGS, "%s/%s", token, origin_cmd);
+        snprintf(filepath, BUFSIZE, "%s/%s", token, origin_cmd);
         cmd->argv[0] = filepath;
         return 0;
     }
