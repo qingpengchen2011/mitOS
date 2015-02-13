@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 // Simplifed xv6 shell.
 
@@ -39,6 +40,8 @@ struct pipecmd {
 int fork1(void);  // Fork but exits on failure.
 struct cmd *parsecmd(char*);
 
+void appendpath(struct execcmd *cmd);
+
 // Execute cmd.  Never returns.
 void
 runcmd(struct cmd *cmd)
@@ -50,7 +53,8 @@ runcmd(struct cmd *cmd)
 
   if(cmd == 0)
     exit(0);
-  
+
+retry:  
   switch(cmd->type){
   default:
     fprintf(stderr, "unknown runcmd\n");
@@ -60,8 +64,12 @@ runcmd(struct cmd *cmd)
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
       exit(0);
-    fprintf(stderr, "exec not implemented\n");
-    // Your code here ...
+    if ( execv(ecmd->argv[0], ecmd->argv)== -1 ) { //if we ever return here, we get an error
+	if ( errno==ENOENT) {
+            appendpath(ecmd);
+  	    goto retry;
+	}
+    }
     break;
 
   case '>':
@@ -78,6 +86,7 @@ runcmd(struct cmd *cmd)
     // Your code here ...
     break;
   }    
+
   exit(0);
 }
 
@@ -329,4 +338,13 @@ parseexec(char **ps, char *es)
   }
   cmd->argv[argc] = 0;
   return ret;
+}
+
+
+// --------------------------------
+void appendpath(struct execcmd *cmd) {
+	static char filepath[MAXARGS];
+	snprintf(filepath, MAXARGS, "%s%s", "/bin/", cmd->argv[0]);
+	cmd->argv[0] = filepath;	
+	return;
 }
