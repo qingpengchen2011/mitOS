@@ -64,6 +64,7 @@ retry:
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
       exit(0);
+    // Your code here ...
     if ( execv(ecmd->argv[0], ecmd->argv)== -1 ) { //if we ever return here, we get an error
 	if ( errno==ENOENT) {
             appendpath(ecmd);
@@ -75,12 +76,19 @@ retry:
   case '>':
   case '<':
     rcmd = (struct redircmd*)cmd;
-    fprintf(stderr, "redir not implemented\n");
     // Your code here ...
+    if ((rcmd->fd = open(rcmd->file, rcmd->mode, (rcmd->type=='>' ? ( S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) : 0))) == -1 ) {
+	perror("redirect open");
+	break;
+    }
+    if (dup2(rcmd->fd, (rcmd->type=='>' ? STDOUT_FILENO : STDIN_FILENO))==-1){
+	perror("dup2");
+	break;
+    }
     runcmd(rcmd->cmd);
     break;
 
-  case '|':
+ case '|':
     pcmd = (struct pipecmd*)cmd;
     fprintf(stderr, "pipe not implemented\n");
     // Your code here ...
