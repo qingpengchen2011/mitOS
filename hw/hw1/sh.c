@@ -40,6 +40,8 @@ struct pipecmd {
 int fork1(void);  // Fork but exits on failure.
 struct cmd *parsecmd(char*);
 int appendpath(struct execcmd *cmd);
+void THREE_NODE( struct pipecmd * pcmd, int p[2]);
+void TWO_NODE( struct pipecmd * pcmd, int p[2]);
 
 
 // Execute cmd.  Never returns.
@@ -91,36 +93,9 @@ retry:
  case '|':
     pcmd = (struct pipecmd*)cmd;
     // Your code here ...
-    if (pipe(p) == -1) {
-	perror("pipe");
-	break;
-    } 
+    //THREE_NODE(pcmd, p);
+    TWO_NODE(pcmd, p);
     
-    if (fork1() == 0) {  // in child 1
-        close(p[1]);
-	if (dup2(p[0], STDIN_FILENO) == -1){
-		perror("child dup2");
-		break;
-	}
-        close(p[0]);
-	runcmd(pcmd->right);
-    }  
-    else { // in parent 
-        close(p[0]);
-	if (fork1() == 0) {  // in child 2
-		if (dup2(p[1], STDOUT_FILENO) == -1){
-			perror("parent dup2");
-			break;
-		}
-		close(p[1]);
-		runcmd(pcmd->left);
-	}
-	// in parent 
-        close(p[1]);
-    }
-    // in parent, wait the 2 children to complete
-    wait(NULL);
-    wait(NULL);
     break;
   }    
 
@@ -377,10 +352,76 @@ parseexec(char **ps, char *es)
   return ret;
 }
 
+//----------------------------------------
 int appendpath(struct execcmd *cmd) {
 	static char filepath[MAXARGS];
 	static int count = 0;
 	snprintf(filepath, MAXARGS, "%s%s", "/bin/", cmd->argv[0]);
 	cmd->argv[0] = filepath;	
 	return (count++) == 1;
+}
+
+
+// macro for piping 
+// -- pipe as 3 process nodes
+
+void THREE_NODE( struct pipecmd * pcmd, int p[2]) { 
+     if (pipe(p) == -1) { 
+	perror("pipe"); 
+	return;
+    } 
+    
+    if (fork1() == 0) {  // in child 1
+        close(p[1]);
+	if (dup2(p[0], STDIN_FILENO) == -1){
+		perror("child dup2");
+		return;
+	}
+        close(p[0]);
+	runcmd(pcmd->right);
+    }  
+    // in parent 
+    close(p[0]);
+    if (fork1() == 0) {  // in child 2
+	if (dup2(p[1], STDOUT_FILENO) == -1){
+		perror("parent dup2");
+		return;
+	}
+	close(p[1]);
+	runcmd(pcmd->left);
+    }
+    // in parent 
+    close(p[1]);
+    // in parent, wait the 2 children to complete
+    wait(NULL);
+    wait(NULL);
+}
+//-- pipe as 2 nodes
+void TWO_NODE( struct pipecmd * pcmd, int p[2]) { 
+    if (pipe(p) == -1) { 
+	perror("pipe"); 
+	return;
+    }     
+    if (fork1() == 0) {  // child as a writer, left hande side of pipe
+        close(p[0]);
+	if (dup2(p[1], STDOUT_FILENO) == -1){
+		perror("child dup2");
+		return;
+	}
+        close(p[1]);
+	runcmd(pcmd->left);
+    }
+
+    // parent as a reader, right hande side of pipe
+    close(p[1]);  
+    if (dup2(p[0], STDIN_FILENO) == -1){
+	perror("parent dup2");
+	return;
+    }
+    close(p[0]);
+    runcmd(pcmd->right);
+    //when writer(left hande side of pipe) has terminated, reader's call on read will return 0, then reader terminates
+    //forcing that, child process terminates before parent, but since we run runcmd on parent process, we are unable to 'wait' any child
+    wait(NULL); //can not be executed
+   
 }
