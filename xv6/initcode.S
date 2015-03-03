@@ -9,7 +9,7 @@
 start:
   pushl $argv
   pushl $init
-  pushl $0  // where caller pc would be
+  pushl $0  // where caller pc would be, <fake return address>
   movl $SYS_exec, %eax
   int $T_SYSCALL
 
